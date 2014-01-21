@@ -30,6 +30,7 @@ abstract class ConfigBasedCommand extends BaseCommand
      */
     protected $logger;
 
+    const DEFAULT_CONFIG_FILES = "./phorever.(json|yml)";
     /**
      * {@inheritdoc}
      */
@@ -37,7 +38,13 @@ abstract class ConfigBasedCommand extends BaseCommand
     {
         parent::__construct($name);
 
-        $this->addOption('config', 'c', InputOption::VALUE_REQUIRED, 'Configuration file listing processes and roles', './phorever.json');
+        $this->addOption(
+            'config',
+            'c',
+            InputOption::VALUE_REQUIRED,
+            'Configuration file listing processes and roles',
+            self::DEFAULT_CONFIG_FILES
+        );
     }
 
     /**
@@ -49,14 +56,10 @@ abstract class ConfigBasedCommand extends BaseCommand
         // CONFIGURATION
         ////
 
-        if ($file = realpath($input->getOption('config'))) {
-            chdir(dirname($file));
-        } else {
-            throw new \Exception(sprintf("Could not find configuration file at '%s'", $file));
-        }
+        $file = $this->getDefaultConfigFile($input->getOption('config'));
 
         $processor = new Processor();
-        $raw_config = json_decode(file_get_contents($file), true);
+        $raw_config = $this->loadConfig($file);
         $this->config = $processor->processConfiguration(new Configuration(), array($raw_config));
 
         ////
@@ -90,6 +93,36 @@ abstract class ConfigBasedCommand extends BaseCommand
 
             $stderrHandler->setFormatter(new ConsoleFormatter());
             $stdoutHandler->setFormatter(new ConsoleFormatter());
+        }
+    }
+
+    private function getDefaultConfigFile($file)
+    {
+        if ($file == self::DEFAULT_CONFIG_FILES) {
+            if ($json_file = realpath('./phorever.json')) {
+                $file = $json_file;
+            }
+            if ($yml_file = realpath('./phorever.yml')) {
+                $file = $yml_file;
+            }
+        }
+
+        if ($file = realpath($file)) {
+            chdir(dirname($file));
+        } else {
+            throw new \Exception(sprintf("Could not find configuration file at '%s'", $file));
+        }
+        return $file;
+    }
+
+    private function loadConfig($file)
+    {
+        $ext = pathinfo($file, PATHINFO_EXTENSION);
+        if (in_array($ext, array('yml', 'yaml'))) {
+            $yaml = new \Symfony\Component\Yaml\Parser();
+            return $yaml->parse(file_get_contents($file));
+        } else {
+            return json_decode(file_get_contents($file), true);
         }
     }
 
